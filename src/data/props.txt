@@ -1,0 +1,13 @@
+Menu:
+".    ·     .      : .    ·     .      :\n"
+"·   @   ·   .  ·   . O  ·   .  ·   .   \n"
+"  :·  o    .    ·   :·   ·      .    · \n"
+"·   .   ·  Asteroids  .  ·   .  ·  ·    \n"
+" .    ·  ·   .   ·   .  ·   . :·  ·    .\n"
+" . O    1) Iniciar juego   ·   < .   o   \n"
+"  :·  · 2) Puntajes     ·      ·      .  \n"
+"·   .   3) Instrucciones   . \n"
+"·   .  ·4) Salir    .    ·    .    ·  .\n"
+" .    ·  ·   .   ·   .  ·   .   @    .\n"
+"  -> Escribe la opción en terminal .  .\n"
+"·  ·    .    ·  ·     .      :.     ·\n"
