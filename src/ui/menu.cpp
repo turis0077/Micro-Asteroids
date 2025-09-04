@@ -10,8 +10,9 @@ void showMenu() {
 " .    ·  ·   .   ·   .  ·   . :·  ·    .\n"
 " . O    1) Iniciar juego   ·   < .   o   \n"
 "  :·  · 2) Puntajes     ·      ·      .  \n"
-"·   .   3) Instrucciones   . \n"
-"·   .  ·4) Salir    .    ·    .    ·  .\n"
+"·   .   3) Instrucciones del juego . \n"
+"  .     4) Controles    ·:  .     .  \n"
+"·   .  ·5) Salir    .    ·    .    ·  .\n"
 " .    ·  ·   .   ·   .  ·   .   @    .\n"
 "  -> Escribe la opción en terminal .  .\n"
 "·  ·    .    ·  ·     .      :.     ·" << endl;
@@ -30,6 +31,9 @@ void showMenu() {
             cout << "\nMostrando instrucciones...\n";
             break;
         case 4:
+            cout << "\nMostrando controles...\n";
+            break;
+        case 5:
             cout << "\nSaliendo del juego. ¡Adiós!\n";
             break;
         default:
