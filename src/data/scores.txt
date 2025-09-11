@@ -1,0 +1,5 @@
+Turis,1200
+Enya,950
+Axel,880
+Marta,720
+Luis,650
