@@ -1,87 +1,74 @@
-#include <iostream>
 #include "../../include/UICommon.hpp"
-#include "scoreboard.hpp"
 #include "../../include/Game.hpp"
+#include "scoreboard.hpp"
+#include "gameInstructions.hpp"
+#include "controlsGuide.hpp"
+#include "modeSelect.hpp"
+#include "menu.hpp"
+
+#include <iostream>
 
 using namespace std;
-
-enum class GameMode { Modo1 = 1, Modo2 = 2 };
-
-static void waitEnter() {
-    cout << "Presiona Enter para continuar...";
-    cin.ignore(numeric_limits<streamsize>::max(), '\n');
-    cin.get();
-}
-
-
-static int readInt(const string& prompt, int minVal, int maxVal) {
-    int v;
-    while (true) {
-        cout << prompt;
-        if (cin >> v && v >= minVal && v <= maxVal) {
-            cin.ignore(numeric_limits<streamsize>::max(), '\n');
-            return v;
-        }
-        cin.clear();
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');
-        cout << "Entrada invalida. Intenta de nuevo.\n";
-    }
-}
-
+using namespace UICommon;
 
 static void showMenu() {
     clearScreen();
-    cout << ".    ·     .      : .    ·     .      :\n"
-"·   @   ·   .  ·   . O  ·   .  ·   .   \n"
-"  :·  o    .    ·   :·   ·      .    · \n"
-"·   .   ·  Asteroids  .  ·   .  ·  ·    \n"
-" .    ·  ·   .   ·   .  ·   . :·  ·    .\n"
-" . O    1) Iniciar juego   ·   < .   o   \n"
-"  :·  · 2) Puntajes     ·      ·      .  \n"
-"·   .   3) Instrucciones del juego . \n"
-"  .     4) Controles    ·:  .     .  \n"
-"·   .  ·5) Salir    .    ·    .    ·  .\n"
-" .    ·  ·   .   ·   .  ·   .   @    .\n"
-"  -> Escribe la opción en terminal .  .\n"
-"·  ·    .    ·  ·     .      :.     ·\n\n";
+    cout << "\n.    ·     .      : .    ·     .      :\n"
+    "·   @   ·   .  ·   . O  ·   .  ·   .   \n"
+    "  :·  o    .    ·   :·   ·      .    · \n"
+    "·   .   ·  Asteroids  .  ·   .  ·  ·    \n"
+    " .    ·  ·   .   ·   .  ·   . :·  ·    .\n"
+    " . O    1) Iniciar juego   ·   < .   o   \n"
+    "  :·  · 2) Puntajes     ·      ·      .  \n"
+    "·   .   3) Instrucciones del juego . \n"
+    "  .     4) Controles    ·:  .     .  \n"
+    "·   .  ·5) Salir    .    ·    .    ·  .\n"
+    " .    ·  ·   .   ·   .  ·   .   @    .\n"
+    "  -> Escribe la opción en terminal .  .\n"
+    "·  ·    .    ·  ·     .      :.     ·\n\n";
 
  }
+
+static void startGameModeSelection() {
+    GameMode mode = selectGameMode();
+    GameConfig cfg = makeConfig(mode);
+    clearScreen();
+    cout << "\nConfiguración del juego:\n\n"
+         << "- Modo: " << ((cfg.mode == GameMode::Modo1) ? "Modo 1" : "Modo 2") << "\n"
+         << "- Jugadores: " << cfg.players << "\n"
+         << "- Vidas por jugador: " << cfg.livesPerPlayer << "\n"
+         << "- Asteroides grandes iniciales: " << cfg.largeAsteroids << "\n"
+         << "- Pequeños necesarios para ganar: " << cfg.targetSmallToWin << "\n";
+    waitEnter();
+}
 
  void processEntry(int opcion) {
     switch (opcion) {
         case 1:
             {
-                cout << "\nIniciando juego...\n";
+                cout << "\nIniciando juego...\n\n";
+                startGameModeSelection();
                 Game game(80, 24);
                 game.run();
             }
             break;
         case 2:
-            UICommon::clearScreen();
+            clearScreen();
             showScoreboardUI("src/data/scores.txt");
             break;
         case 3:
-            cout << "\nMostrando instrucciones...\n";
+            cout << "\nMostrando instrucciones...\n\n";
+            showGameInstructions();
             break;
         case 4:
             cout << "\nMostrando controles...\n";
+            showControlsGuide();
             break;
         case 5:
-            cout << "\nSaliendo del juego. ¡Adiós!\n";
+            cout << "\nSaliendo del juego. ¡Adiós Astronauta(s)!\n";
             break;
         default:
             cout << "\nOpción no válida\n";
+            break;
     }
-}
-
-int main() {
-    int opcion = 0;
-    do {
-        UICommon::clearScreen();
-        showMenu();
-        cout << "Opción: ";
-        cin >> opcion;
-        processEntry(opcion);
-    } while (opcion != 5);
-    return 0;
 }
