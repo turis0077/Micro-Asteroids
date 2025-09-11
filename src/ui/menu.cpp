@@ -1,30 +1,11 @@
-// src/ui/menu.cpp
 #include <iostream>
-#include <limits>
-#include <string>
+#include "../../include/UICommon.hpp"
+#include "scoreboard.hpp"
+#include "../../include/Game.hpp"
+
 using namespace std;
 
 enum class GameMode { Modo1 = 1, Modo2 = 2 };
-
-struct GameConfig {
-    GameMode mode;
-    int players;
-    int livesPer;
-    int largeAsteroids;
-    int targetSmallToWin;
-    int scorePerSmall;
-    bool wrap;
-};
-
-
-static void clearScreen() {
-#ifdef _WIN32
-    system("cls");
-#else
-    system("clear");
-#endif
-}
-
 
 static void waitEnter() {
     cout << "Presiona Enter para continuar...";
@@ -69,10 +50,15 @@ static void showMenu() {
  void processEntry(int opcion) {
     switch (opcion) {
         case 1:
-            cout << "\nIniciando juego...\n";
+            {
+                cout << "\nIniciando juego...\n";
+                Game game(80, 24);
+                game.run();
+            }
             break;
         case 2:
-            cout << "\nMostrando puntajes...\n";
+            UICommon::clearScreen();
+            showScoreboardUI("src/data/scores.txt");
             break;
         case 3:
             cout << "\nMostrando instrucciones...\n";
@@ -91,10 +77,11 @@ static void showMenu() {
 int main() {
     int opcion = 0;
     do {
+        UICommon::clearScreen();
         showMenu();
         cout << "Opción: ";
         cin >> opcion;
         processEntry(opcion);
-    } while (opcion != 4);
+    } while (opcion != 5);
     return 0;
 }
