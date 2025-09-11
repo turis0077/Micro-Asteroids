@@ -1,21 +1,10 @@
-Menu:
-".    ·     .      : .    ·     .      :\n"
-"·   @   ·   .  ·   . O  ·   .  ·   .   \n"
-"  :·  o    .    ·   :·   ·      .    · \n"
-"·   .   ·  Asteroids  .  ·   .  ·  ·    \n"
-" .    ·  ·   .   ·   .  ·   . :·  ·    .\n"
-" . O    1) Iniciar juego   ·   < .   o   \n"
-"  :·  · 2) Puntajes     ·      ·      .  \n"
-"·   .   3) Instrucciones del juego . \n"
-"  .     4) Controles    ·:  .     .  \n"
-"·   .  ·5) Salir    .    ·    .    ·  .\n"
-" .    ·  ·   .   ·   .  ·   .   @    .\n"
-"  -> Escribe la opción en terminal .  .\n"
-"·  ·    .    ·  ·     .      :.     ·\n"
+// src/ui/gameInstructions.cpp
+#include <iostream>
 
-Instrucciones del juego:
+using namespace std;
 
-"╔══════════════════════════════════════════════════════════════════════════╗\n"
+void showInstructions() {
+    cout << "╔══════════════════════════════════════════════════════════════════════════╗\n"
 "║   Guia del Astronauta:                                                   ║\n"
 "║   ---------------------------------------------------------------------- ║\n"
 "║   Su objetivo es evitar colisionar con los asteroides y destruirlos.     ║\n"
@@ -46,4 +35,5 @@ Instrucciones del juego:
 "║                                                                          ║\n"
 "║                    Así se verán sus naves: < ^ > v                       ║\n"
 "║                 Y estas serán sus balas (proyectiles): .                 ║\n"
-"╚══════════════════════════════════════════════════════════════════════════╝"
+"╚══════════════════════════════════════════════════════════════════════════╝\n"
+}
