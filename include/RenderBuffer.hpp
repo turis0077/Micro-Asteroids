@@ -1,3 +1,4 @@
+// include/RenderBuffer.hpp
 #pragma once
 #include <vector>
 #include <string>
@@ -42,14 +43,6 @@ public:
         set(x, y+hh-1, '+'); set(x+ww-1, y+hh-1, '+');
     }
     void present() const {
-        // La limpieza de pantalla ahora se maneja externamente con UICommon::clearScreen()
-        /*
-         #ifdef _WIN32
-             system("cls");
-         #else
-             system("clear");
-         #endif
-        */
          for (const auto& row : buf) std::cout << row << "\n";
      }
  };

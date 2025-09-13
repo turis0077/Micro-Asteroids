@@ -9,7 +9,7 @@ ifeq ($(OS),Windows_NT)
 else
   EXE :=
   LIBS := -lpthread
-  NCURSES := -lncurses
+  NCURSES := -lncursesw
   RUN := ./$(TARGET)
   MKDIR_P = mkdir -p
   RM_RF   = rm -rf

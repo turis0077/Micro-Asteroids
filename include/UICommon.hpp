@@ -1,25 +1,30 @@
+// include/UICommon.hpp
+
 #pragma once
 #include <iostream>
 #include <limits>
 #include <string>
 #include <clocale>
 #ifdef _WIN32
+    #ifndef NOMINMAX
+    #define NOMINMAX
+    #endif
     #include <windows.h>
 #endif
-
-using namespace std;
 
 namespace UICommon {
     inline void initConsoleUTF8() {
         #ifdef _WIN32
             SetConsoleOutputCP(CP_UTF8);
             SetConsoleCP(CP_UTF8);
+            setlocale(LC_ALL, ".UTF-8");
+        #else
+            setlocale(LC_ALL, "");
         #endif
-        setlocale(LC_ALL, ".UTF-8");
     }
     
+    // limpieza simple de consola (Windows/Linux)
     inline void clearScreen() {
-        // limpieza simple de consola (Windows/Linux)
         #ifdef _WIN32
             system("cls");
         #else
@@ -28,26 +33,26 @@ namespace UICommon {
     }
 
     inline void waitEnter() {
-        cout << "\nPresiona Enter para continuar...";
-        cout.flush();
-        
-        if(cin.peek() == '\n')
-            cin.get();
+        std::cout << "\nPresiona Enter para continuar...";
+        std::cout.flush();
 
-        cin.get();
+        if(std::cin.peek() == '\n')
+            std::cin.get();
+
+        std::cin.get();
     }
 
-    inline int readInt(const string& prompt, int low, int high) {
+    inline int readInt(const std::string& prompt, int low, int high) {
         int v;
         while (true) {
-            cout << prompt;
-            if (cin >> v && v >= low && v <= high) {
-                cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            std::cout << prompt;
+            if (std::cin >> v && v >= low && v <= high) {
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 return v;
             }
-            cin.clear();
-            cin.ignore(numeric_limits<streamsize>::max(), '\n');
-            cout << "Entrada invalida. Intenta de nuevo.\n";
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            std::cout << "Entrada invalida. Intenta de nuevo.\n";
         }
     }
 }

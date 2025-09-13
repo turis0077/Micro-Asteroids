@@ -1,3 +1,5 @@
+// src/ui/menu.cpp
+
 #include "../../include/UICommon.hpp"
 #include "../../include/Game.hpp"
 #include "scoreboard.hpp"
@@ -47,8 +49,10 @@ void startGameModeSelection() {
         case 1:
             {
                 cout << "\nIniciando juego...\n\n";
-                startGameModeSelection();
-                Game game(80, 24);
+                
+                GameMode mode = selectGameMode();
+                GameConfig cfg = makeConfig(mode);
+                Game game(80, 24, cfg);
                 game.run();
             }
             break;
