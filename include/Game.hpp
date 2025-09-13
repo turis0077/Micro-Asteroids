@@ -1,8 +1,15 @@
 #pragma once
 #include "RenderBuffer.hpp"
 #include "GameEntity.hpp"
+#include "Config.hpp"
+#include "Layout.hpp"
+#include "HUD.hpp"
+#include "Input.hpp"
+
 #include <vector>
 #include <chrono>
+
+using namespace std;
 
 class Game {
 public:
@@ -10,13 +17,22 @@ public:
     void run();
 
 private:
+    int width, height;
+    bool is_running = false;
+    bool paused = false;
+
+    RenderBuffer buffer;
+    vector<GameEntity> entities;
+
+    GameConfig cfg;
+    Layout layout;
+    HUD hud;
+    Input input;
+
+    chrono::steady_clock::time_point last_frame_time;
+
     void processInput();
     void update(float delta_time);
     void render();
-
-    int width, height;
-    bool is_running;
-    RenderBuffer buffer;
-    std::vector<GameEntity> entities;
-    std::chrono::steady_clock::time_point last_frame_time;
+    void wrapInPlay(GameEntity& entity);
 };
