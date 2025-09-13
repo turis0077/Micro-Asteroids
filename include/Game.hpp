@@ -1,3 +1,5 @@
+// include/Game.hpp
+
 #pragma once
 #include "RenderBuffer.hpp"
 #include "GameEntity.hpp"

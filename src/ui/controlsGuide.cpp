@@ -5,7 +5,7 @@
 using namespace std;
 using namespace UICommon;
 
-void showControls() {
+void showControlsGuide() {
     clearScreen();
 
     cout << "\nControles del juego: \n";

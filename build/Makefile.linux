@@ -1,0 +1,45 @@
+# SO
+ifeq ($(OS),Windows_NT)
+  EXE := .exe
+  LIBS :=
+  NCURSES :=
+  RUN := $(TARGET)
+  MKDIR_P = mkdir -p
+  RM_RF   = rm -rf
+else
+  EXE :=
+  LIBS := -lpthread
+  NCURSES := -lncurses
+  RUN := ./$(TARGET)
+  MKDIR_P = mkdir -p
+  RM_RF   = rm -rf
+endif
+
+CXX := g++
+CXXFLAGS := -O2 -std=gnu++17 -Wall -Wextra -pthread -Iinclude -finput-charset=UTF-8 -fexec-charset=UTF-8
+LDFLAGS := $(LIBS) $(NCURSES)
+
+BIN := bin
+OBJDIR := $(BIN)/obj
+TARGET := $(BIN)/asteroids$(EXE)
+
+SOURCES := main.cpp $(wildcard src/ui/*.cpp) $(wildcard src/logic/*.cpp)
+OBJECTS := $(patsubst %.cpp,$(OBJDIR)/%.o,$(SOURCES))
+
+.PHONY: all run clean
+
+all: $(TARGET)
+
+$(TARGET): $(OBJECTS)
+	@$(MKDIR_P) $(BIN)
+	$(CXX) $(OBJECTS) -o $@ $(LDFLAGS)
+
+$(OBJDIR)/%.o: %.cpp
+	@$(MKDIR_P) $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+run: all
+	$(RUN)
+
+clean:
+	@$(RM_RF) $(BIN)

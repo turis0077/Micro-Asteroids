@@ -1,3 +1,4 @@
+// include/AsciiLegend.hpp
 #pragma once
 #include <string>
 

@@ -11,7 +11,7 @@
 using namespace std;
 using namespace UICommon;
 
-static void showMenu() {
+void showMenu() {
     clearScreen();
     cout << "\n.    ·     .      : .    ·     .      :\n"
     "·   @   ·   .  ·   . O  ·   .  ·   .   \n"
@@ -29,7 +29,7 @@ static void showMenu() {
 
  }
 
-static void startGameModeSelection() {
+void startGameModeSelection() {
     GameMode mode = selectGameMode();
     GameConfig cfg = makeConfig(mode);
     clearScreen();
@@ -38,7 +38,7 @@ static void startGameModeSelection() {
          << "- Jugadores: " << cfg.players << "\n"
          << "- Vidas por jugador: " << cfg.livesPerPlayer << "\n"
          << "- Asteroides grandes iniciales: " << cfg.largeAsteroids << "\n"
-         << "- Pequeños necesarios para ganar: " << cfg.targetSmallToWin << "\n";
+         << "- Asteroides pequeños necesarios para ganar: " << cfg.targetSmallToWin << "\n";
     waitEnter();
 }
 

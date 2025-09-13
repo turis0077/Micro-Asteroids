@@ -11,7 +11,7 @@ using namespace std;
 using namespace UICommon;
 using namespace ascii;
 
-void showInstructions() {
+void showGameInstructions() {
     clearScreen();
     cout << "\n╔══════════════════════════════════════════════════════════════════════════╗\n"
     "║   Guía del Astronauta:                                                   ║\n"

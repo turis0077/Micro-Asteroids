@@ -31,6 +31,7 @@ GameMode selectGameMode() {
     else if (mode == 2) return GameMode::Modo2;
     else if (mode == 3) {
         showGameInstructions();
+        return selectGameMode();
     }
     else {
         cout << "\nOpción inválida\n";

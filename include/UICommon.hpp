@@ -2,10 +2,22 @@
 #include <iostream>
 #include <limits>
 #include <string>
+#include <clocale>
+#ifdef _WIN32
+    #include <windows.h>
+#endif
 
 using namespace std;
 
 namespace UICommon {
+    inline void initConsoleUTF8() {
+        #ifdef _WIN32
+            SetConsoleOutputCP(CP_UTF8);
+            SetConsoleCP(CP_UTF8);
+        #endif
+        setlocale(LC_ALL, ".UTF-8");
+    }
+    
     inline void clearScreen() {
         // limpieza simple de consola (Windows/Linux)
         #ifdef _WIN32
@@ -17,7 +29,11 @@ namespace UICommon {
 
     inline void waitEnter() {
         cout << "\nPresiona Enter para continuar...";
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        cout.flush();
+        
+        if(cin.peek() == '\n')
+            cin.get();
+
         cin.get();
     }
 
