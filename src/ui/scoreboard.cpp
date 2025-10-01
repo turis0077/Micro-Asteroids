@@ -1,3 +1,5 @@
+// ui/scoreboard.cpp
+
 #include "scoreboard.hpp"
 #include "../logic/render.hpp"
 #include <fstream>

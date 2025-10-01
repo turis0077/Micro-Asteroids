@@ -7,9 +7,9 @@
 #include "HUD.hpp"
 #include "Input.hpp"
 
-
 #include <vector>
 #include <chrono>
+#include <random>
 
 class Game {
 public:
@@ -22,12 +22,19 @@ private:
     bool paused = false;
 
     RenderBuffer buffer;
-    std::vector<GameEntity> entities;
-
     GameConfig cfg;
     Layout layout;
     HUD hud;
     Input input;
+
+    std::vector<GameEntity> ships;
+    std::vector<GameEntity> asteroids;
+    std::vector<GameEntity> bullets;
+
+    InputState last_input{};
+    float p1_cd{0.f}, p2_cd{0.f};
+
+    std::mt19937 rng{12345};
 
     std::chrono::steady_clock::time_point last_frame_time;
 
@@ -35,4 +42,13 @@ private:
     void update(float delta_time);
     void render();
     void wrapInPlay(GameEntity& entity);
+
+    void spawnInitialAsteroids();
+    void spawnAsteroid(float x,float y, EntityKind k, float speed=12.0f);
+    void splitAsteroid(size_t idx);
+    void fireBullet(int playerIdx);
+    void updateShips(float dt);
+    void updateAsteroids(float dt);
+    void updateBullets(float dt);
+    void handleCollisions();
 };

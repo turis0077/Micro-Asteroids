@@ -2,16 +2,14 @@
 
 #include "../../include/UICommon.hpp"
 #include "../../include/Game.hpp"
-#include "scoreboard.hpp"
-#include "gameInstructions.hpp"
-#include "controlsGuide.hpp"
-#include "modeSelect.hpp"
-#include "menu.hpp"
+#include "../../include/UIControl.hpp"
 
 #include <iostream>
 
 using namespace std;
 using namespace UICommon;
+using namespace UIControl;
+using namespace ascii;
 
 void showMenu() {
     clearScreen();

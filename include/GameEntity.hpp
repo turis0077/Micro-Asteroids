@@ -1,27 +1,32 @@
 // include/GameEntity.hpp
 #pragma once
+#include <string>
+#include <cmath>
 #include "RenderBuffer.hpp"
 
-class GameEntity {
-public:
-    float x, y;
-    float vx, vy;
-    char display_char;
-    bool is_active;
+enum class EntityKind { Ship1, Ship2, AstBig, AstMed, AstSmall, Bullet1, Bullet2 };
 
-    GameEntity(float x, float y, float vx, float vy, char dc)
-        : x(x), y(y), vx(vx), vy(vy), display_char(dc), is_active(true) {}
+struct GameEntity {
+    float x{}, y{}, vx{}, vy{};
+    float angle{0.0f};
+    float radius{1.0f};
+    float ttl{-1.0f};
+    std::string sprite;
+    EntityKind kind{EntityKind::AstSmall};
 
-    virtual ~GameEntity() = default;
+    GameEntity() = default;
 
-    void update(float delta_time) {
-        if (!is_active) return;
+    GameEntity(float X, float Y, float VX, float VY, const std::string& spr, EntityKind k,
+               float R=1.0f, float Ang=0.0f, float TTL=-1.0f): x(X), y(Y), vx(VX), vy(VY),
+        angle(Ang), radius(R), ttl(TTL), sprite(spr), kind(k) {}
+
+    inline void update(float delta_time) {
         x += vx * delta_time;
         y += vy * delta_time;
+        if (ttl > 0.0f) ttl -= delta_time;
     }
 
-    void draw(RenderBuffer& buffer) const {
-        if (!is_active) return;
-        buffer.set(static_cast<int>(x), static_cast<int>(y), display_char);
+    inline void draw(RenderBuffer& buffer) const {
+        buffer.drawText((int)std::lround(x), (int)std::lround(y), sprite);
     }
 };
