@@ -5,7 +5,7 @@ Grupo 2:
 * Enya Gálvez <br>
 
 Para compilar, deberá ejecutar un comando distinto dependideno de su sistema operativo:
-* Windows: mingw32-make -f build/Makefile.win
+* Windows: mingw32-make -f build\Makefile.win
 * Linux: make -f build/Makefile.linux
 
 Para ejecutar basta con ingresar en la terminal:
