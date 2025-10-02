@@ -43,11 +43,4 @@ namespace Concurrency {
         }
         pthread_mutex_unlock(&gs.tickMx);
     }
-
-    static void* generic_worker(GameState* gs) {
-        while (gs->running.load(std::memory_order_acquire)) {
-            frameSync(*gs);
-        }
-        return nullptr;
-    }
 }

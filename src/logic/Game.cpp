@@ -49,6 +49,8 @@ Game::Game(int width, int height, const GameConfig& cfgIn): width(width), height
     initConsoleUTF8();
 
     spawnInitialAsteroids();
+
+    gs.game = this;
 }
 
 /* Bucle principal del juego: Se encarga de calcular delta_time, extraer el input acumulado por el hilo de entrada y lo aplica.
@@ -60,38 +62,33 @@ void Game::run() {
 
     while (is_running) {
         auto now = chrono::steady_clock::now();
-        float dt = chrono::duration<float>(now - last_frame_time).count();
-        last_frame_time = now;
+    float dt = chrono::duration<float>(now - last_frame_time).count();
+    last_frame_time = now;
 
-        pthread_mutex_lock(&state_mx);
-        frame_dt = dt;
-        pthread_mutex_unlock(&state_mx);
+    pthread_mutex_lock(&state_mx);
+    frame_dt = dt;
+    gs.dt = dt;
+    gs.paused.store(paused.load(), std::memory_order_relaxed);
+    pthread_mutex_unlock(&state_mx);
 
-        // Fase A: actualización (naves, balas, asteroides)
-        Concurrency::frameSync(gs);
-        // Fase B: colisiones
-        Concurrency::frameSync(gs);
-        // Fase C: render
-        Concurrency::frameSync(gs);
+    Concurrency::frameSync(gs); // A
+    Concurrency::frameSync(gs); // B
+    Concurrency::frameSync(gs); // C
 
-        if (game_over) {
-            is_running = false;
-            // Desbloquear por última vez a todos los hilos que esperan en la barrera
-            Concurrency::frameSync(gs);
-            Concurrency::frameSync(gs);
-            Concurrency::frameSync(gs);
-        }
+    std::this_thread::sleep_for(std::chrono::milliseconds(16)); // 6FP
+
+    if (game_over) {
+        is_running = false;
+    }
     }
 
     stopWorkerThreads();
     pthread_mutex_destroy(&state_mx);
-
     input.shutdown();
 }
 
 void Game::startWorkerThreads() {
     int workers = 0;
-    workers += 1; // input
     workers += 1; // render
     workers += 1; // ship1
     if (cfg.players == 2) workers += 1; // ship2
@@ -99,8 +96,7 @@ void Game::startWorkerThreads() {
     workers += 1; // asteroids
     workers += 1; // collisions
     workers += 1; // spawn
-    
-    workers += 1; // para el hilo principal del juego
+    workers += 1; // hilo principal (main game loop)
 
     Concurrency::initConcurrency(gs, workers);
     gs.running.store(true, memory_order_release);
@@ -120,6 +116,8 @@ void Game::startWorkerThreads() {
 void Game::stopWorkerThreads() {
     gs.running.store(false, memory_order_release);
     Concurrency::frameSync(gs);
+    Concurrency::frameSync(gs);
+    Concurrency::frameSync(gs);
 
     if (th_input) pthread_join(th_input, nullptr);
     if (th_render) pthread_join(th_render, nullptr);
@@ -137,41 +135,37 @@ void Game::stopWorkerThreads() {
 
 void* Game::thInput(void* arg) {
     Game* g = static_cast<Game*>(arg);
-    while (!g -> game_over && g -> is_running) {
+    while (g->gs.running.load(std::memory_order_acquire)) {
         pthread_mutex_lock(&g -> state_mx);
-        g->processInput();
+        g -> processInput();
         pthread_mutex_unlock(&g -> state_mx);
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        Concurrency::frameSync(g -> gs);
-        Concurrency::frameSync(g -> gs);
-        Concurrency::frameSync(g -> gs);
     }
     return nullptr;
 }
 
 void* Game::thRender(void* arg) {
     Game* g = static_cast<Game*>(arg);
-    while (!g -> game_over && g -> is_running) {
-        Concurrency::frameSync(g -> gs); // A
-        Concurrency::frameSync(g -> gs); // B
-        pthread_mutex_lock(&g -> state_mx);
-        g -> render();
-        pthread_mutex_unlock(&g -> state_mx);
-        Concurrency::frameSync(g -> gs); // C
+    while (g->gs.running.load(std::memory_order_acquire)) {
+        Concurrency::frameSync(g->gs); // A
+        Concurrency::frameSync(g->gs); // B
+        pthread_mutex_lock(&g->state_mx);
+        g->render();
+        pthread_mutex_unlock(&g->state_mx);
+        Concurrency::frameSync(g->gs); // C
     }
     return nullptr;
 }
 
 void* Game::thShip1(void* arg) {
     Game* g = static_cast<Game*>(arg);
-    while (!g -> game_over && g -> is_running) {
+    while (g->gs.running.load(std::memory_order_acquire)) {
         Concurrency::frameSync(g->gs); // A
-        if (!g->paused && !g -> game_over) {
-            float dt;
-            pthread_mutex_lock(&g -> state_mx);
-            dt = g -> frame_dt;
-            pthread_mutex_unlock(&g -> state_mx);
-            g -> updateShips(0, dt);
+        if (!g->paused && !g->game_over) {
+            pthread_mutex_lock(&g->state_mx);
+            float dt = g->frame_dt;
+            g->updateShips(0, dt);
+            pthread_mutex_unlock(&g->state_mx);
         }
         Concurrency::frameSync(g->gs); // B
         Concurrency::frameSync(g->gs); // C
@@ -181,26 +175,24 @@ void* Game::thShip1(void* arg) {
 
 void* Game::thShip2(void* arg) {
     Game* g = static_cast<Game*>(arg);
-    while (!g -> game_over && g -> is_running) {
-        Concurrency::frameSync(g -> gs); // A
-        if (!g -> paused && !g -> game_over) {
-            float dt;
-            bool hasP2;
-            pthread_mutex_lock(&g -> state_mx);
-            dt = g -> frame_dt;
-            hasP2 = (g -> ships.size() > 1);
-            pthread_mutex_unlock(&g -> state_mx);
-            if (hasP2) g -> updateShips(1, dt);
+    while (g->gs.running.load(std::memory_order_acquire)) {
+        Concurrency::frameSync(g->gs); // A
+        if (!g->paused && !g->game_over) {
+            pthread_mutex_lock(&g->state_mx);
+            float dt = g->frame_dt;
+            bool hasP2 = (g->ships.size() > 1);
+            if (hasP2) g->updateShips(1, dt);
+            pthread_mutex_unlock(&g->state_mx);
         }
-        Concurrency::frameSync(g -> gs); // B
-        Concurrency::frameSync(g -> gs); // C
+        Concurrency::frameSync(g->gs); // B
+        Concurrency::frameSync(g->gs); // C
     }
     return nullptr;
 }
 
 void* Game::thBullets(void* arg) {
     Game* g = static_cast<Game*>(arg);
-    while (!g -> game_over && g -> is_running) {
+    while (g->gs.running.load(std::memory_order_acquire)) {
         Concurrency::frameSync(g -> gs); // A
         if (!g -> paused && !g -> game_over) {
             float dt;
@@ -217,7 +209,7 @@ void* Game::thBullets(void* arg) {
 
 void* Game::thAsteroids(void* arg) {
     Game* g = static_cast<Game*>(arg);
-    while (!g -> game_over && g -> is_running) {
+    while (g->gs.running.load(std::memory_order_acquire)) {
         Concurrency::frameSync(g -> gs); // A
         if (!g -> paused && !g -> game_over) {
             float dt;
@@ -234,7 +226,7 @@ void* Game::thAsteroids(void* arg) {
 
 void* Game::thCollisions(void* arg) {
     Game* g = static_cast<Game*>(arg);
-    while (!g -> game_over && g -> is_running) {
+    while (g->gs.running.load(std::memory_order_acquire)) {
         Concurrency::frameSync(g -> gs); // A
         Concurrency::frameSync(g -> gs); // B
         if (!g -> paused && !g -> game_over) {
@@ -252,7 +244,7 @@ void* Game::thSpawn(void* arg) {
     Game* g = static_cast<Game*>(arg);
     std::uniform_real_distribution<float> U01(0.f, 1.f);
     float accum = 0.f;
-    while (!g -> game_over && g -> is_running) {
+    while (g->gs.running.load(std::memory_order_acquire)) {
         Concurrency::frameSync(g -> gs); // A
         float dt;
         pthread_mutex_lock(&g -> state_mx);
@@ -545,13 +537,16 @@ void Game::render() {
     buffer.clear(' ');
 
     layout.compute(width, height);
-    layout.drawFrames(buffer);
 
+    // Entidades
     for (const auto& a : asteroids) a.draw(buffer);
     for (const auto& s : ships) s.draw(buffer);
     for (const auto& b : bullets) b.draw(buffer);
-    hud.draw(layout, cfg, buffer);
 
+    // HUD
+    hud.draw(layout, cfg, buffer);
+    layout.drawFrames(buffer);
+    
     if (paused) {
         string p = "[PAUSED]";
         int px = layout.play.x + (layout.play.w - (int)p.size())/2;

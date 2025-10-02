@@ -10,6 +10,9 @@
     #define NOMINMAX
     #endif
     #include <windows.h>
+#else
+    #include <sys/ioctl.h>
+    #include <unistd.h>
 #endif
 
 namespace UICommon {
@@ -23,15 +26,38 @@ namespace UICommon {
         #endif
     }
     
-    // limpieza simple de consola (Windows/Linux)
+    // Ancho/alto actuales de la terminal
+    inline int termCols() {
+    #ifdef _WIN32
+        CONSOLE_SCREEN_BUFFER_INFO csbi;
+        GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+        return csbi.srWindow.Right - csbi.srWindow.Left + 1;
+    #else
+        winsize ws{};
+        ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
+        return ws.ws_col ? ws.ws_col : 80;
+    #endif
+    }
+    inline int termRows() {
+    #ifdef _WIN32
+        CONSOLE_SCREEN_BUFFER_INFO csbi;
+        GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+        return csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+    #else
+        winsize ws{};
+        ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
+        return ws.ws_row ? ws.ws_row : 25;
+    #endif
+    }
+
+    // Limpieza por ANSI
     inline void clearScreen() {
-        #ifdef _WIN32
-            int _rc = std::system("cls");
-            (void)_rc;
-        #else
-            int _rc = std::system("clear");
-            (void)_rc;
-        #endif
+    #ifdef _WIN32
+        int _rc = std::system("cls"); (void)_rc;
+    #else
+        std::cout << "\x1b[2J\x1b[H"; // borrar y mover cursor a 0,0
+        std::cout.flush();
+    #endif
     }
 
     inline void waitEnter() {

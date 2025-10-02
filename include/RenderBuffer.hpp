@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <iostream>
+#include "UICommon.hpp"
 
 class RenderBuffer {
     int w, h;
@@ -13,7 +14,7 @@ public:
     void clear(char fill = ' ') {
         for (auto &row : buf) std::fill(row.begin(), row.end(), fill);
     }
-    int width() const { return w; }
+    int width()  const { return w; }
     int height() const { return h; }
 
     void set(int x, int y, char c) {
@@ -28,21 +29,23 @@ public:
             buf[y][xx] = s[i];
         }
     }
-    void hline(int x, int y, int len, char c='-') {
-        for (int i=0;i<len;i++) set(x+i, y, c);
-    }
-    void vline(int x, int y, int len, char c='|') {
-        for (int i=0;i<len;i++) set(x, y+i, c);
-    }
+    void hline(int x, int y, int len, char c='-') { for (int i=0;i<len;i++) set(x+i, y, c); }
+    void vline(int x, int y, int len, char c='|') { for (int i=0;i<len;i++) set(x, y+i, c); }
     void rect(int x, int y, int ww, int hh) {
-        hline(x, y, ww, '-');
-        hline(x, y+hh-1, ww, '-');
-        vline(x, y, hh, '|');
-        vline(x+ww-1, y, hh, '|');
-        set(x, y, '+'); set(x+ww-1, y, '+');
-        set(x, y+hh-1, '+'); set(x+ww-1, y+hh-1, '+');
+        hline(x, y, ww, '-'); hline(x, y+hh-1, ww, '-');
+        vline(x, y, hh, '|'); vline(x+ww-1, y, hh, '|');
+        set(x, y, '+'); set(x+ww-1, y, '+'); set(x, y+hh-1, '+'); set(x+ww-1, y+hh-1, '+');
     }
+
     void present() const {
-         for (const auto& row : buf) std::cout << row << "\n";
-     }
+        const int cols = UICommon::termCols();
+        const int rows = std::min(UICommon::termRows(), (int)buf.size());
+        for (int y = 0; y < rows; ++y) {
+            const std::string& row = buf[y];
+            const int len = std::min(cols, (int)row.size());
+            std::cout.write(row.data(), len);
+            std::cout.put('\n');
+        }
+        std::cout.flush();
+    }
  };
