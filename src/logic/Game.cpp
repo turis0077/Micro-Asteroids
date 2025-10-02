@@ -54,7 +54,7 @@ void Game::startThreads() {
     gs.game = this;
     const int N = 4;
 
-    initConcurrency(gs, N + 1);
+    Concurrency::initConcurrency(gs, N + 1);
     gs.running = true;
 
     worker_threads.clear();
@@ -62,13 +62,13 @@ void Game::startThreads() {
 
     pthread_t thread;
 
-    pthread_create(&thread, nullptr, inputThread, &gs);
+    pthread_create(&thread, nullptr, Concurrency::inputThread, &gs);
     worker_threads.push_back(thread);
-    pthread_create(&thread, nullptr, asteroidThread, &gs);
+    pthread_create(&thread, nullptr, Concurrency::asteroidThread, &gs);
     worker_threads.push_back(thread);
-    pthread_create(&thread, nullptr, collisionThread, &gs);
+    pthread_create(&thread, nullptr, Concurrency::collisionThread, &gs);
     worker_threads.push_back(thread);
-    pthread_create(&thread, nullptr, bulletManagerThread, &gs);
+    pthread_create(&thread, nullptr, Concurrency::bulletManagerThread, &gs);
     worker_threads.push_back(thread);
 }
 
@@ -77,11 +77,11 @@ void Game::stopThreads() {
     if (!gs.running.load()) return;
 
     gs.running = false;
-    Concurrency::syncFrame(gs);
+    Concurrency::frameSync(gs);
 
     for (pthread_t th : worker_threads) pthread_join(th, nullptr);
     worker_threads.clear();
-    Concurrency::destroy(gs);
+    Concurrency::destroyConcurrency(gs);
 }
 
 void Game::run() {
@@ -99,7 +99,7 @@ void Game::run() {
         if (!paused) update(delta_time);
         render();
 
-        if (use_threads) Concurrency::syncFrame(gs); // sincronización por frame
+        if (use_threads) Concurrency::frameSync(gs); // sincronización por frame
         this_thread::sleep_for(chrono::milliseconds(5));
     }
     if (use_threads) stopThreads();
@@ -226,8 +226,7 @@ void Game::splitAsteroid(size_t idx) {
     } else if (a.kind == EntityKind::AstMed) {
         spawnAsteroid(a.x, a.y, EntityKind::AstSmall, 24.f);
         spawnAsteroid(a.x, a.y, EntityKind::AstSmall, 24.f);
-    } else {
-        // small: se borra
+    } else { // Se borra
     }
 }
 
