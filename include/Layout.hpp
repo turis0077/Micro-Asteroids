@@ -37,8 +37,8 @@ struct Layout {
     */
     void drawFrames(RenderBuffer& rb) const {
         rb.rect(play.x - 1, play.y - 1, play.w + 2, play.h + 1);
-        rb.hline(hud.x, hud.y + hud.h, hud.w, '=');
-        rb.hline(footer.x, footer.y - 1, footer.w, '=');
+        rb.hlineRB(hud.x, hud.y + hud.h, hud.w, '=');
+        rb.hlineRB(footer.x, footer.y - 1, footer.w, '=');
     }
 
 

@@ -533,10 +533,10 @@ void Game::wrapInPlay(GameEntity& e) {
 }
 
 void Game::render() {
-    clearScreen();
+    erase();
     buffer.clear(' ');
 
-    layout.compute(width, height);
+    layout.compute(COLS, LINES);
 
     // Entidades
     for (const auto& a : asteroids) a.draw(buffer);
