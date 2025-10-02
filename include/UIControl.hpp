@@ -4,6 +4,8 @@
 #include <vector>
 #include "Config.hpp"
 
+class Game;
+
 namespace UIControl {
     using GameMode = ::GameMode;
     using GameConfig = ::GameConfig;
@@ -30,4 +32,7 @@ namespace UIControl {
 
     // Marcador de puntos
     void showScoreboardUI(const std::string& path);
+
+    // Ventana de GameOver
+    void showGameOverScreen(Game& game);
 }

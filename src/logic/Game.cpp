@@ -2,16 +2,19 @@
 #include "../../include/Game.hpp"
 #include "../../include/UICommon.hpp"
 #include "../../include/AsciiLegend.hpp"
+#include "../../include/Concurrency.hpp"
 
-#include <iostream>
-#include <thread>
-#include <chrono>
-#include <string>
 #include <algorithm>
 #include <cmath>
+#include <chrono>
+#include <iomanip>
 #include <random>
+#include <string>
+#include <thread>
+#include <iostream>
 #include <fstream>
 #include <sstream>
+
 
 using namespace ascii;
 using namespace UICommon;
@@ -20,288 +23,282 @@ using namespace std;
 static inline float deg2rad(float d){ return d * 3.1415926535f / 180.0f; }
 
 namespace {
-    inline std::string sym(char c) { return string(1, c); }
-    inline std::string sym(const char* s) { return string(s); }
-    inline std::string sym(const string& s) { return s; }
+    inline string sym(char c) { return string(1, c); }
+    inline string sym(const char* s) { return string(s); }
+    inline string sym(const string& s) { return s; }
 }
 
-Game::Game(int width, int height, const GameConfig& cfgIn)
-    : width(width), height(height), buffer(width, height), cfg(cfgIn), last_frame_time(chrono::steady_clock::now()) {
-    
+Game::Game(int width, int height, const GameConfig& cfgIn): width(width), height(height), buffer(width, height), cfg(cfgIn), last_frame_time(chrono::steady_clock::now()) {
+
+    pthread_mutex_init(&state_mx, nullptr);
+
     layout.compute(width, height);
 
     float cx = layout.play.x + layout.play.w * 0.5f;
     float cy = layout.play.y + layout.play.h * 0.5f;
     
-
     // Crear naves y establecer vidas
-    ships.emplace_back(cx-5.f, cy, 0.f, 0.f, sym(ShipUp), EntityKind::Ship1, 1.0f, -deg2rad(90.f));
+    ships.emplace_back(cx - 5.f, cy, 0.f, 0.f, sym(ShipUp), EntityKind::Ship1, 1.0f, -deg2rad(90.f));
     if (cfg.players == 2)
-        ships.emplace_back(cx+5.f, cy, 0.f, 0.f, sym(ShipUp), EntityKind::Ship2, 1.0f, -deg2rad(90.f));
+        ships.emplace_back(cx + 5.f, cy, 0.f, 0.f, sym(ShipUp), EntityKind::Ship2, 1.0f, -deg2rad(90.f));
 
     hud.st.p1Lives = cfg.livesPerPlayer;
-    hud.st.p2Lives = (cfg.players==2 ? cfg.livesPerPlayer : 0);
+    hud.st.p2Lives = (cfg.players == 2 ? cfg.livesPerPlayer : 0);
 
     input.init();
     initConsoleUTF8();
 
-    // Crear asteroides iniciales
     spawnInitialAsteroids();
 }
 
-void Game::startThreads() {
-    if (!use_threads) return;
-
-    gs.game = this;
-    const int N = 4;
-
-    Concurrency::initConcurrency(gs, N + 1);
-    gs.running = true;
-
-    worker_threads.clear();
-    worker_threads.reserve(N);
-
-    pthread_t thread;
-
-    pthread_create(&thread, nullptr, Concurrency::inputThread, &gs);
-    worker_threads.push_back(thread);
-    pthread_create(&thread, nullptr, Concurrency::asteroidThread, &gs);
-    worker_threads.push_back(thread);
-    pthread_create(&thread, nullptr, Concurrency::collisionThread, &gs);
-    worker_threads.push_back(thread);
-    pthread_create(&thread, nullptr, Concurrency::bulletManagerThread, &gs);
-    worker_threads.push_back(thread);
-}
-
-void Game::stopThreads() {
-    if (!use_threads) return;
-    if (!gs.running.load()) return;
-
-    gs.running = false;
-    Concurrency::frameSync(gs);
-
-    for (pthread_t th : worker_threads) pthread_join(th, nullptr);
-    worker_threads.clear();
-    Concurrency::destroyConcurrency(gs);
-}
-
+/* Bucle principal del juego: Se encarga de calcular delta_time, extraer el input acumulado por el hilo de entrada y lo aplica.
+ * Si no esta pausado/finalizado, se actualiza y renderiza el frame. Si finaliza, muestra GameOver.
+*/
 void Game::run() {
     is_running = true;
-    
-    // Iniciar hilos
-    input_thread = std::thread(&Game::inputThreadFunc, this);
-    render_thread = std::thread(&Game::renderThreadFunc, this);
-    ship1_thread = std::thread(&Game::ship1ThreadFunc, this);
-    
-    if (cfg.players == 2) {
-        ship2_thread = std::thread(&Game::ship2ThreadFunc, this);
-    }
+    startWorkerThreads();
 
-    // Bucle principal del juego
     while (is_running) {
-        auto current_time = chrono::steady_clock::now();
-        float delta_time = chrono::duration<float>(current_time - last_frame_time).count();
-        last_frame_time = current_time;
+        auto now = chrono::steady_clock::now();
+        float dt = chrono::duration<float>(now - last_frame_time).count();
+        last_frame_time = now;
 
-        {
-            std::lock_guard<std::mutex> lock(game_mutex);
-            if (!paused && !game_over) {
-                update(delta_time);
-                checkGameOver();
-            }
-        }
+        pthread_mutex_lock(&state_mx);
+        frame_dt = dt;
+        pthread_mutex_unlock(&state_mx);
+
+        // Fase A: actualización (naves, balas, asteroides)
+        Concurrency::frameSync(gs);
+        // Fase B: colisiones
+        Concurrency::frameSync(gs);
+        // Fase C: render
+        Concurrency::frameSync(gs);
 
         if (game_over) {
-            showGameOverScreen();
-            break;
+            is_running = false;
+            // Desbloquear por última vez a todos los hilos que esperan en la barrera
+            Concurrency::frameSync(gs);
+            Concurrency::frameSync(gs);
+            Concurrency::frameSync(gs);
         }
-
-        if (use_threads) Concurrency::frameSync(gs); // sincronización por frame
-        this_thread::sleep_for(chrono::milliseconds(16)); // ~60 FPS
     }
 
-    // Esperar a que terminen los hilos
-    if (input_thread.joinable()) input_thread.join();
-    if (render_thread.joinable()) render_thread.join();
-    if (ship1_thread.joinable()) ship1_thread.join();
-    if (ship2_thread.joinable()) ship2_thread.join();
+    stopWorkerThreads();
+    pthread_mutex_destroy(&state_mx);
 
     input.shutdown();
 }
 
-void Game::inputThreadFunc() {
-    while (is_running) {
-        std::lock_guard<std::mutex> lock(game_mutex);
-        processInput();
-        this_thread::sleep_for(chrono::milliseconds(10));
+void Game::startWorkerThreads() {
+    int workers = 0;
+    workers += 1; // input
+    workers += 1; // render
+    workers += 1; // ship1
+    if (cfg.players == 2) workers += 1; // ship2
+    workers += 1; // bullets
+    workers += 1; // asteroids
+    workers += 1; // collisions
+    workers += 1; // spawn
+    
+    workers += 1; // para el hilo principal del juego
+
+    Concurrency::initConcurrency(gs, workers);
+    gs.running.store(true, memory_order_release);
+
+    pthread_create(&th_input, nullptr, &Game::thInput, this);
+    pthread_create(&th_render, nullptr, &Game::thRender, this);
+    pthread_create(&th_ship1, nullptr, &Game::thShip1, this);
+    if (cfg.players == 2) {
+        pthread_create(&th_ship2, nullptr, &Game::thShip2, this);
     }
+    pthread_create(&th_bullets, nullptr, &Game::thBullets, this);
+    pthread_create(&th_asteroids, nullptr, &Game::thAsteroids, this);
+    pthread_create(&th_collisions, nullptr, &Game::thCollisions, this);
+    pthread_create(&th_spawn, nullptr, &Game::thSpawn, this);
 }
 
-void Game::renderThreadFunc() {
-    while (is_running) {
-        std::lock_guard<std::mutex> lock(game_mutex);
-        render();
-        this_thread::sleep_for(chrono::milliseconds(16)); // ~60 FPS
-    }
+void Game::stopWorkerThreads() {
+    gs.running.store(false, memory_order_release);
+    Concurrency::frameSync(gs);
+
+    if (th_input) pthread_join(th_input, nullptr);
+    if (th_render) pthread_join(th_render, nullptr);
+    if (th_ship1) pthread_join(th_ship1, nullptr);
+    if (th_ship2) pthread_join(th_ship2, nullptr);
+    if (th_bullets) pthread_join(th_bullets, nullptr);
+    if (th_asteroids) pthread_join(th_asteroids, nullptr);
+    if (th_collisions) pthread_join(th_collisions, nullptr);
+    if (th_spawn) pthread_join(th_spawn, nullptr);
+
+    th_input = th_render = th_ship1 = th_ship2 = th_bullets = th_asteroids = th_collisions = th_spawn = {};
+
+    Concurrency::destroyConcurrency(gs);
 }
 
-void Game::ship1ThreadFunc() {
-    while (is_running && !game_over) {
-        std::lock_guard<std::mutex> lock(game_mutex);
-        if (!paused && ships.size() > 0) {
-            auto& ship = ships[0];
-            // Lógica específica del jugador 1
-            if (last_input.p1_left) ship.angle -= deg2rad(180.f) * 0.016f;
-            if (last_input.p1_right) ship.angle += deg2rad(180.f) * 0.016f;
-            if (last_input.p1_thrust) {
-                ship.vx += cos(ship.angle) * 40.f * 0.016f;
-                ship.vy += sin(ship.angle) * 40.f * 0.016f;
-            }
-            if (last_input.p1_brake) {
-                ship.vx *= 0.98f;
-                ship.vy *= 0.98f;
-            }
-            if (last_input.p1_fire && p1_cd <= 0.f) {
-                fireBullet(0);
-                p1_cd = 0.3f;
-            }
-        }
-        this_thread::sleep_for(chrono::milliseconds(16));
+void* Game::thInput(void* arg) {
+    Game* g = static_cast<Game*>(arg);
+    while (!g -> game_over && g -> is_running) {
+        pthread_mutex_lock(&g -> state_mx);
+        g->processInput();
+        pthread_mutex_unlock(&g -> state_mx);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        Concurrency::frameSync(g -> gs);
+        Concurrency::frameSync(g -> gs);
+        Concurrency::frameSync(g -> gs);
     }
+    return nullptr;
 }
 
-void Game::ship2ThreadFunc() {
-    while (is_running && !game_over) {
-        std::lock_guard<std::mutex> lock(game_mutex);
-        if (!paused && ships.size() > 1) {
-            auto& ship = ships[1];
-            // Lógica específica del jugador 2
-            if (last_input.p2_left) ship.angle -= deg2rad(180.f) * 0.016f;
-            if (last_input.p2_right) ship.angle += deg2rad(180.f) * 0.016f;
-            if (last_input.p2_thrust) {
-                ship.vx += cos(ship.angle) * 40.f * 0.016f;
-                ship.vy += sin(ship.angle) * 40.f * 0.016f;
-            }
-            if (last_input.p2_brake) {
-                ship.vx *= 0.98f;
-                ship.vy *= 0.98f;
-            }
-            if (last_input.p2_fire && p2_cd <= 0.f) {
-                fireBullet(1);
-                p2_cd = 0.3f;
-            }
-        }
-        this_thread::sleep_for(chrono::milliseconds(16));
+void* Game::thRender(void* arg) {
+    Game* g = static_cast<Game*>(arg);
+    while (!g -> game_over && g -> is_running) {
+        Concurrency::frameSync(g -> gs); // A
+        Concurrency::frameSync(g -> gs); // B
+        pthread_mutex_lock(&g -> state_mx);
+        g -> render();
+        pthread_mutex_unlock(&g -> state_mx);
+        Concurrency::frameSync(g -> gs); // C
     }
+    return nullptr;
 }
 
-void Game::checkGameOver() {
-    // Verificar si todos los asteroides han sido destruidos
-    if (asteroids.empty()) {
-        game_over = true;
-        if (cfg.players == 1) {
-            player1_won = true;
-        } else {
-            // En modo 2 jugadores, gana quien tenga más puntos
-            player1_won = (hud.st.p1Score >= hud.st.p2Score);
-            player2_won = (hud.st.p2Score > hud.st.p1Score);
+void* Game::thShip1(void* arg) {
+    Game* g = static_cast<Game*>(arg);
+    while (!g -> game_over && g -> is_running) {
+        Concurrency::frameSync(g->gs); // A
+        if (!g->paused && !g -> game_over) {
+            float dt;
+            pthread_mutex_lock(&g -> state_mx);
+            dt = g -> frame_dt;
+            pthread_mutex_unlock(&g -> state_mx);
+            g -> updateShips(0, dt);
         }
-        return;
+        Concurrency::frameSync(g->gs); // B
+        Concurrency::frameSync(g->gs); // C
     }
-
-    // Verificar si algún jugador se quedó sin vidas
-    if (hud.st.p1Lives <= 0) {
-        game_over = true;
-        if (cfg.players == 2) {
-            player2_won = true;
-        }
-        return;
-    }
-
-    if (cfg.players == 2 && hud.st.p2Lives <= 0) {
-        game_over = true;
-        player1_won = true;
-        return;
-    }
+    return nullptr;
 }
 
-void Game::showGameOverScreen() {
-    clearScreen();
-    
-    cout << "\n\n";
-    cout << "  ╔══════════════════════════════════════╗\n";
-    cout << "  ║            JUEGO TERMINADO           ║\n";
-    cout << "  ╠══════════════════════════════════════╣\n";
-    
-    if (cfg.players == 1) {
-        if (player1_won) {
-            cout << "  ║          ¡FELICIDADES!               ║\n";
-            cout << "  ║      Has destruido todos los         ║\n";
-            cout << "  ║          asteroides!                 ║\n";
-        } else {
-            cout << "  ║          GAME OVER                   ║\n";
-            cout << "  ║      Te quedaste sin vidas           ║\n";
+void* Game::thShip2(void* arg) {
+    Game* g = static_cast<Game*>(arg);
+    while (!g -> game_over && g -> is_running) {
+        Concurrency::frameSync(g -> gs); // A
+        if (!g -> paused && !g -> game_over) {
+            float dt;
+            bool hasP2;
+            pthread_mutex_lock(&g -> state_mx);
+            dt = g -> frame_dt;
+            hasP2 = (g -> ships.size() > 1);
+            pthread_mutex_unlock(&g -> state_mx);
+            if (hasP2) g -> updateShips(1, dt);
         }
-        cout << "  ║                                      ║\n";
-        cout << "  ║  Puntuación Final: " << setw(15) << hud.st.p1Score << "  ║\n";
-    } else {
-        if (player1_won) {
-            cout << "  ║        ¡JUGADOR 1 GANA!              ║\n";
-        } else if (player2_won) {
-            cout << "  ║        ¡JUGADOR 2 GANA!              ║\n";
-        } else {
-            cout << "  ║           ¡EMPATE!                   ║\n";
-        }
-        cout << "  ║                                      ║\n";
-        cout << "  ║  Jugador 1: " << setw(20) << hud.st.p1Score << "  ║\n";
-        cout << "  ║  Jugador 2: " << setw(20) << hud.st.p2Score << "  ║\n";
+        Concurrency::frameSync(g -> gs); // B
+        Concurrency::frameSync(g -> gs); // C
     }
-    
-    cout << "  ╠══════════════════════════════════════╣\n";
-    cout << "  ║  Ingresa tu nombre para guardar      ║\n";
-    cout << "  ║  tu puntuación:                      ║\n";
-    cout << "  ╚══════════════════════════════════════╝\n";
-    cout << "\n  Nombre: ";
-    
-    string playerName;
-    getline(cin, playerName);
-    
-    if (playerName.empty()) {
-        playerName = "Anónimo";
-    }
-    
-    // Guardar puntuación del ganador o del jugador único
-    int finalScore = (cfg.players == 1) ? hud.st.p1Score : 
-                     (player1_won ? hud.st.p1Score : hud.st.p2Score);
-    
-    saveScore(playerName, finalScore);
-    
-    cout << "\n  ¡Puntuación guardada exitosamente!\n";
-    cout << "  Presiona Enter para continuar...";
-    cin.get();
+    return nullptr;
 }
 
-void Game::saveScore(const std::string& playerName, int score) {
-    std::ofstream file("scores.csv", std::ios::app);
-    
-    if (!file.is_open()) {
-        // Si el archivo no existe, crear con encabezados
-        std::ofstream newFile("scores.csv");
-        newFile << "Nombre,Puntuacion,Fecha\n";
-        newFile.close();
-        file.open("scores.csv", std::ios::app);
+void* Game::thBullets(void* arg) {
+    Game* g = static_cast<Game*>(arg);
+    while (!g -> game_over && g -> is_running) {
+        Concurrency::frameSync(g -> gs); // A
+        if (!g -> paused && !g -> game_over) {
+            float dt;
+            pthread_mutex_lock(&g -> state_mx);
+            dt = g -> frame_dt;
+            g -> updateBullets(dt);
+            pthread_mutex_unlock(&g -> state_mx);
+        }
+        Concurrency::frameSync(g->gs); // B
+        Concurrency::frameSync(g->gs); // C
     }
-    
-    // Obtener fecha actual
-    auto now = std::chrono::system_clock::now();
-    auto time_t = std::chrono::system_clock::to_time_t(now);
-    auto tm = *std::localtime(&time_t);
-    
-    char dateStr[100];
-    std::strftime(dateStr, sizeof(dateStr), "%Y-%m-%d %H:%M:%S", &tm);
-    
-    file << playerName << "," << score << "," << dateStr << "\n";
-    file.close();
+    return nullptr;
+}
+
+void* Game::thAsteroids(void* arg) {
+    Game* g = static_cast<Game*>(arg);
+    while (!g -> game_over && g -> is_running) {
+        Concurrency::frameSync(g -> gs); // A
+        if (!g -> paused && !g -> game_over) {
+            float dt;
+            pthread_mutex_lock(&g -> state_mx);
+            dt = g -> frame_dt;
+            g -> updateAsteroids(dt);
+            pthread_mutex_unlock(&g -> state_mx);
+        }
+        Concurrency::frameSync(g -> gs); // B
+        Concurrency::frameSync(g -> gs); // C
+    }
+    return nullptr;
+}
+
+void* Game::thCollisions(void* arg) {
+    Game* g = static_cast<Game*>(arg);
+    while (!g -> game_over && g -> is_running) {
+        Concurrency::frameSync(g -> gs); // A
+        Concurrency::frameSync(g -> gs); // B
+        if (!g -> paused && !g -> game_over) {
+            pthread_mutex_lock(&g -> state_mx);
+            g -> handleCollisions();
+            g -> checkGameOver();
+            pthread_mutex_unlock(&g -> state_mx);
+        }
+        Concurrency::frameSync(g -> gs); // C
+    }
+    return nullptr;
+}
+
+void* Game::thSpawn(void* arg) {
+    Game* g = static_cast<Game*>(arg);
+    std::uniform_real_distribution<float> U01(0.f, 1.f);
+    float accum = 0.f;
+    while (!g -> game_over && g -> is_running) {
+        Concurrency::frameSync(g -> gs); // A
+        float dt;
+        pthread_mutex_lock(&g -> state_mx);
+        dt = g -> frame_dt;
+        pthread_mutex_unlock(&g -> state_mx);
+
+        Concurrency::frameSync(g -> gs); // B
+
+        if (!g -> paused && !g -> game_over) {
+            accum += dt;
+            if (accum > 0.12f) {
+                accum = 0.f;
+                pthread_mutex_lock(&g -> state_mx);
+                if ((int)g -> asteroids.size() < std::max(2, g -> cfg.largeAsteroids / 2)) {
+                    int side = (int)floor(U01(g->rng) * 4.f) % 4;
+                    float x = 0,y = 0;
+                    if (side == 0) {
+                        x = g -> layout.play.x + 1;
+                        y = g -> layout.play.y + U01(g -> rng)*(g -> layout.play.h - 2);
+                    }
+                    if (side == 1) {
+                        x = g -> layout.play.x + g -> layout.play.w - 2;
+                        y = g -> layout.play.y + U01(g -> rng) * (g -> layout.play.h - 2);
+                    }
+                    if (side == 2) {
+                        y = g -> layout.play.y + 1;
+                        x = g -> layout.play.x + U01(g -> rng) * (g -> layout.play.w - 2);
+                    }
+                    if (side == 3) {
+                        y = g -> layout.play.y + g -> layout.play.h - 2;
+                        x = g -> layout.play.x + U01(g -> rng) * (g -> layout.play.w - 2);
+                    }
+                    if (!g -> inSafeZone(x, y, 8.f)) {
+                        std::uniform_real_distribution<float> ang(0.f, 2.f*3.1415926535f);
+                        std::uniform_real_distribution<float> v(10.f, 14.f);
+                        float a = ang(g -> rng), sp = v(g -> rng);
+                        float vx = cos(a) * sp, vy = sin(a) * sp;
+                        g -> asteroids.emplace_back(x, y, vx, vy, sym(BigAst), EntityKind::AstBig, 2.0f);
+                    }
+                }
+                pthread_mutex_unlock(&g->state_mx);
+            }
+        }
+        Concurrency::frameSync(g -> gs); // C
+    }
+    return nullptr;
 }
 
 void Game::processInput() {
@@ -312,67 +309,115 @@ void Game::processInput() {
     if (st.newround) {
         hud.st.p1Score = hud.st.p2Score = 0;
         hud.st.p1Lives = cfg.livesPerPlayer;
-        hud.st.p2Lives = (cfg.players==2 ? cfg.livesPerPlayer : 0);
+        hud.st.p2Lives = (cfg.players == 2 ? cfg.livesPerPlayer : 0);
         game_over = false;
         player1_won = false;
         player2_won = false;
-        
-        for (auto& s: ships) { 
-            s.x = layout.play.x + layout.play.w/2.f; 
-            s.y = layout.play.y + layout.play.h/2.f; 
-            s.vx = s.vy = 0.f; 
-            s.angle = -deg2rad(90.f); 
-            s.sprite = ShipUp; 
+
+        for (auto& s: ships) {
+            s.x = layout.play.x + layout.play.w / 2.f;
+            s.y = layout.play.y + layout.play.h / 2.f;
+            s.vx = s.vy = 0.f;
+            s.angle = -deg2rad(90.f);
+            s.sprite = ShipUp;
         }
-        bullets.clear(); 
-        asteroids.clear(); 
+        bullets.clear();
+        asteroids.clear();
         spawnInitialAsteroids();
     }
     last_input = st;
 }
 
-void Game::update(float delta_time) {
-    p1_cd = max(0.f, p1_cd - delta_time);
-    p2_cd = max(0.f, p2_cd - delta_time);
-
-    // Los hilos de las naves manejan su propia lógica
-    // updateShips(delta_time); // Comentado porque ahora lo manejan los hilos
-    updateAsteroids(delta_time);
-    updateBullets(delta_time);
-    handleCollisions();
+void Game::checkGameOver() {
+    if (asteroids.empty()) {
+        game_over = true;
+        if (cfg.players == 1) {
+            player1_won = true;
+        } else {
+            player1_won = (hud.st.p1Score >= hud.st.p2Score);
+            player2_won = (hud.st.p2Score > hud.st.p1Score);
+        }
+        return;
+    }
+    if (hud.st.p1Lives <= 0) {
+        game_over = true;
+        if (cfg.players == 2) player2_won = true;
+        return;
+    }
+    if (cfg.players == 2 && hud.st.p2Lives <= 0) {
+        game_over = true;
+        player1_won = true;
+        return;
+    }
 }
 
-void Game::updateShips(float dt) {
-    // Este método ahora es manejado por los hilos individuales de cada nave
-    // Se mantiene por compatibilidad pero la lógica está en ship1ThreadFunc y ship2ThreadFunc
-    
-    const float MAXS = 60.f;
-    
-    for (auto& s : ships) {
-        // Aplicar velocidad máxima
-        float speed = sqrt(s.vx*s.vx + s.vy*s.vy);
-        if (speed > MAXS) {
-            s.vx = (s.vx / speed) * MAXS;
-            s.vy = (s.vy / speed) * MAXS;
-        }
-        
-        // Actualizar posición
-        s.x += s.vx * dt;
-        s.y += s.vy * dt;
-        
-        // Envolver en área de juego
-        wrapInPlay(s);
-        
-        // Actualizar sprite según ángulo
-        float deg = s.angle * 180.f / 3.1415926535f;
-        while (deg < 0) deg += 360;
-        while (deg >= 360) deg -= 360;
-        
-        if (deg >= 315 || deg < 45) s.sprite = ShipUp;
-        else if (deg >= 45 && deg < 135) s.sprite = ShipRight;
-        else if (deg >= 135 && deg < 225) s.sprite = ShipDown;
-        else s.sprite = ShipLeft;
+void Game::saveScore(const string& playerName, int score) {
+    ofstream file("scores.csv", ios::app);
+    if (!file.is_open()) {
+        std::ofstream newFile("scores.csv");
+        newFile << "Nombre,Puntuacion,Fecha\n";
+        newFile.close();
+        file.open("scores.csv", ios::app);
     }
+    auto now = chrono::system_clock::now();
+    auto tt = chrono::system_clock::to_time_t(now);
+    auto tm = *localtime(&tt);
+    char dateStr[100];
+    std::strftime(dateStr, sizeof(dateStr), "%Y-%m-%d %H:%M:%S", &tm);
+    file << playerName << "," << score << "," << dateStr << "\n";
+    file.close();
+}
+
+void Game::updateShips(size_t i, float dt) {
+    if (i >= ships.size()) return;
+    auto& s = ships[i];
+
+    const float ROT = deg2rad(180.f);
+    const float THRUST = 40.f;
+    const float BRAKE = 0.80f;
+    const float MAXS = 60.f;
+
+    bool L = false, R = false, T = false, B = false, F = false;
+    if (i==0) {
+        L = last_input.p1_left;  R = last_input.p1_right;
+        T = last_input.p1_thrust;B = last_input.p1_brake;
+        F = last_input.p1_fire;
+        if (F && p1_cd<=0.f) { fireBullet(0); p1_cd = 0.25f; }
+    } else {
+        L = last_input.p2_left;
+        R = last_input.p2_right;
+        T = last_input.p2_thrust;
+        B = false;
+        F = last_input.p2_fire;
+        if (F && p2_cd<=0.f) { fireBullet(1); p2_cd = 0.25f; }
+    }
+
+    if (L) s.angle -= ROT * dt;
+    if (R) s.angle += ROT * dt;
+
+    if (T) {
+        s.vx += std::cos(s.angle) * THRUST * dt;
+        s.vy += std::sin(s.angle) * THRUST * dt;
+    }
+    if (B) { s.vx *= BRAKE; s.vy *= BRAKE; }
+
+    float speed = std::sqrt(s.vx*s.vx + s.vy*s.vy);
+    if (speed > MAXS) {
+        float k = MAXS / speed;
+        s.vx *= k; s.vy *= k;
+    }
+
+    s.update(dt);
+    wrapInPlay(s);
+
+    float deg = s.angle * 180.f / 3.1415926535f;
+    while (deg < 0) deg += 360;
+    while (deg >= 360) deg -= 360;
+
+    if (deg >= 315 || deg < 45) s.sprite = ShipUp;
+    else if (deg >= 45 && deg < 135) s.sprite = ShipRight;
+    else if (deg >= 135 && deg < 225) s.sprite = ShipDown;
+    else s.sprite = ShipLeft;
 }
 
 void Game::updateAsteroids(float dt) {
@@ -381,12 +426,11 @@ void Game::updateAsteroids(float dt) {
 
 void Game::updateBullets(float dt) {
     for (auto& b: bullets) { b.update(dt); wrapInPlay(b); }
-    // eliminar expiradas
     bullets.erase(remove_if(bullets.begin(), bullets.end(), [](const GameEntity& b){ return b.ttl <= 0.f; }), bullets.end());
 }
 
 void Game::handleCollisions() {
-    // balas vs asteroides (círculo simple)
+    // balas vs asteroides
     for (size_t bi=0; bi<bullets.size();) {
         bool hit = false;
         for (size_t ai=0; ai<asteroids.size(); ++ai) {
@@ -405,10 +449,27 @@ void Game::handleCollisions() {
         if (hit) bullets.erase(bullets.begin()+bi);
         else ++bi;
     }
+
+    // naves vs asteroides
+    for (size_t si=0; si<ships.size(); ++si) {
+        auto& s = ships[si];
+        for (auto& a : asteroids) {
+            float dx = a.x - s.x, dy = a.y - s.y;
+            float R  = a.radius + s.radius;
+            if (dx*dx + dy*dy <= R*R) {
+                if (si==0 && hud.st.p1Lives>0) --hud.st.p1Lives;
+                if (si==1 && hud.st.p2Lives>0) --hud.st.p2Lives;
+                s.x = layout.play.x + layout.play.w*0.5f;
+                s.y = layout.play.y + layout.play.h*0.5f;
+                s.vx = s.vy = 0.f;
+                s.angle = -deg2rad(90.f);
+                s.sprite = ShipUp;
+            }
+        }
+    }
 }
 
 void Game::splitAsteroid(size_t idx) {
-    // reemplaza asteroide impactado
     auto a = asteroids[idx];
     asteroids.erase(asteroids.begin()+idx);
 
@@ -418,7 +479,8 @@ void Game::splitAsteroid(size_t idx) {
     } else if (a.kind == EntityKind::AstMed) {
         spawnAsteroid(a.x, a.y, EntityKind::AstSmall, 24.f);
         spawnAsteroid(a.x, a.y, EntityKind::AstSmall, 24.f);
-    } else { // Se borra
+    } else {
+        // Se borra
     }
 }
 
@@ -432,19 +494,25 @@ void Game::spawnInitialAsteroids() {
 }
 
 void Game::spawnAsteroid(float x,float y, EntityKind k, float speed) {
-    // velocidad aleatoria
     uniform_real_distribution<float> ang(0.f, 2.f*3.1415926535f);
     float a = ang(rng);
     float vx = cos(a)*speed, vy = sin(a)*speed;
 
-    // sprite y radio por tamaño
     string spr = sym(SmallAst);
     float r = 1.f;
-    if (k==EntityKind::AstBig)   { spr = sym(BigAst);   r = 2.0f; }
-    if (k==EntityKind::AstMed)   { spr = sym(MedAst);   r = 1.5f; }
-    if (k==EntityKind::AstSmall) { spr = sym(SmallAst); r = 1.0f; }
+    if (k == EntityKind::AstBig) { spr = sym(BigAst); r = 2.0f; }
+    if (k == EntityKind::AstMed) { spr = sym(MedAst); r = 1.5f; }
+    if (k == EntityKind::AstSmall) { spr = sym(SmallAst); r = 1.0f; }
 
     asteroids.emplace_back(x, y, vx, vy, spr, k, r);
+}
+
+bool Game::inSafeZone(float x, float y, float safeR) const {
+    for (auto const& s : ships) {
+        float dx = x - s.x, dy = y - s.y;
+        if (dx*dx + dy*dy <= safeR*safeR) return true;
+    }
+    return false;
 }
 
 void Game::fireBullet(int playerIdx) {

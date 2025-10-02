@@ -26,9 +26,11 @@ namespace UICommon {
     // limpieza simple de consola (Windows/Linux)
     inline void clearScreen() {
         #ifdef _WIN32
-            system("cls");
+            int _rc = std::system("cls");
+            (void)_rc;
         #else
-            system("clear");
+            int _rc = std::system("clear");
+            (void)_rc;
         #endif
     }
 
