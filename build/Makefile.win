@@ -31,7 +31,7 @@ all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
 	@$(call MKDIR_P,$(BIN))
-	$(CXX) $(OBJECTS) -o $@ $(LDFLAGS)
+	$(CXX) $(OBJECTS) -o $@ $(CXXFLAGS) $(LDFLAGS)
 
 $(OBJDIR)/%.o: %.cpp
 	@$(call MKDIR_P,$(dir $@))

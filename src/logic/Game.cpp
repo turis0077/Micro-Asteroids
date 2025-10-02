@@ -2,6 +2,7 @@
 #include "../../include/Game.hpp"
 #include "../../include/UICommon.hpp"
 #include "../../include/AsciiLegend.hpp"
+#include "../../include/Concurrency.hpp"
 
 #include <iostream>
 #include <thread>
@@ -47,19 +48,61 @@ Game::Game(int width, int height, const GameConfig& cfgIn)
     spawnInitialAsteroids();
 }
 
+void Game::startThreads() {
+    if (!use_threads) return;
+
+    gs.game = this;
+    const int N = 4;
+
+    initConcurrency(gs, N + 1);
+    gs.running = true;
+
+    worker_threads.clear();
+    worker_threads.reserve(N);
+
+    pthread_t thread;
+
+    pthread_create(&thread, nullptr, inputThread, &gs);
+    worker_threads.push_back(thread);
+    pthread_create(&thread, nullptr, asteroidThread, &gs);
+    worker_threads.push_back(thread);
+    pthread_create(&thread, nullptr, collisionThread, &gs);
+    worker_threads.push_back(thread);
+    pthread_create(&thread, nullptr, bulletManagerThread, &gs);
+    worker_threads.push_back(thread);
+}
+
+void Game::stopThreads() {
+    if (!use_threads) return;
+    if (!gs.running.load()) return;
+
+    gs.running = false;
+    Concurrency::syncFrame(gs);
+
+    for (pthread_t th : worker_threads) pthread_join(th, nullptr);
+    worker_threads.clear();
+    Concurrency::destroy(gs);
+}
+
 void Game::run() {
     is_running = true;
+    if (use_threads) startThreads();
     while (is_running) {
         auto current_time = chrono::steady_clock::now();
         float delta_time = chrono::duration<float>(current_time - last_frame_time).count();
         last_frame_time = current_time;
 
+        gs.dt = delta_time;
+        gs.paused.store(paused, std::memory_order_release);
+
         processInput();
         if (!paused) update(delta_time);
         render();
 
+        if (use_threads) Concurrency::syncFrame(gs); // sincronización por frame
         this_thread::sleep_for(chrono::milliseconds(5));
     }
+    if (use_threads) stopThreads();
     input.shutdown();
 }
 

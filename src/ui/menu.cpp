@@ -3,6 +3,7 @@
 #include "../../include/UICommon.hpp"
 #include "../../include/Game.hpp"
 #include "../../include/UIControl.hpp"
+#include "../../include/Concurrency.hpp"
 
 #include <iostream>
 

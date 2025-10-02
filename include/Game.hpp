@@ -6,10 +6,12 @@
 #include "Layout.hpp"
 #include "HUD.hpp"
 #include "Input.hpp"
+#include "Concurrency.hpp"
 
 #include <vector>
 #include <chrono>
 #include <random>
+#include <pthread.h>
 
 class Game {
 public:
@@ -38,6 +40,13 @@ private:
 
     std::chrono::steady_clock::time_point last_frame_time;
 
+    // Concurrencia
+    bool use_threads = true;
+    GameState gs{};
+    std::vector<pthread_t> worker_threads;
+    void startThreads();
+    void stopThreads();
+    
     void processInput();
     void update(float delta_time);
     void render();
